@@ -1,4 +1,4 @@
-package maze;
+package com.omar.maze;
 
 import java.util.*;
 

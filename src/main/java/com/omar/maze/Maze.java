@@ -1,4 +1,4 @@
-package maze;
+package com.omar.maze;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -13,12 +13,10 @@ import java.util.function.Predicate;
 
 public class Maze {
 
+    private static final String PASSAGE = "\s\s";
+    private static final String WALL = "██";
 
     static BiPredicate<int[][], Cell> isBlocked = (maze, cell) -> maze[cell.x()][cell.y()] == 1;
-
-    static BiPredicate<int[][], Cell> isDeadEnd = (maze, cell) -> getNeighbor(cell).stream()
-            .filter(e -> e.x() >= 0 && e.y() >= 0 && e.x() <= maze.length - 1 && e.y() <= maze[0].length - 1)
-            .filter(neighbor -> isBlocked.test(maze, neighbor)).count() == 3;
 
     private Graph mazeGraph;
 
@@ -57,28 +55,36 @@ public class Maze {
                 this.maze[i][j] = 1;
             }
         }
+        Random random=new Random();
         mazeGraph = new Graph();
-        int rootX = (maze.length - 1) / 2;
-        int rootY = (maze[0].length - 1) / 2;
+        int middle = (maze.length - 1) / 2;
+        int offset=4;
+        int rootX=random.nextInt(offset * 2 + 1) + middle - offset;
+        offset=3;
+        int rootY=random.nextInt(offset * 2 + 1) + middle - offset;
+
         ArrayList<Cell> queue = new ArrayList<>();
         queue.add(new Cell(rootX, rootY));
-        Cell nextCell = queue.get(0);
+        Cell nextCell = queue.getFirst();
 
         List<Cell> frontierCells = getFrontierCells(nextCell);
         maze[nextCell.x()][nextCell.y()] = 0;
         while (!frontierCells.isEmpty()) {
-            Collections.shuffle(frontierCells);
+            //Collections.shuffle(frontierCells);
+            AtomicInteger count= new AtomicInteger();
             Optional<Cell> frontierCell = frontierCells.stream()
                     .filter(e -> e.x() > 0 && e.y() > 0 && e.x() < maze.length - 1 && e.y() < maze[0].length - 1)
                     .filter(e -> isBlocked.test(maze, e))
-                    .findAny();
+                    .peek(e-> count.getAndIncrement())
+                    .skip(random.nextInt(count.get()==0?1:count.get()))
+                    .findFirst();
             if (frontierCell.isEmpty()) {
                 queue.remove(nextCell);
                 if (queue.isEmpty()) {
                     break;
                 }
                 Collections.shuffle(queue);
-                nextCell = queue.iterator().next();
+                nextCell = queue.getFirst();
                 frontierCells = getFrontierCells(nextCell);
                 continue;
             }
@@ -93,8 +99,8 @@ public class Maze {
             mazeGraph.addEdge(inbetweenCell, frontierCell.get());
 
             queue.add(frontierCell.get());
-            Collections.shuffle(queue);
-            nextCell = queue.iterator().next();
+            //Collections.shuffle(queue);
+            nextCell = queue.getFirst();
             frontierCells = getFrontierCells(nextCell);
         }
 
@@ -142,13 +148,13 @@ public class Maze {
     }
 
     public void printMaze() {
-        for (int[] ints : maze) {
+        for (int[] row : maze) {
             System.out.println();
             for (int j = 0; j < maze[0].length; j++) {
-                if (ints[j] == 0) {
-                    System.out.print("\s\s");
+                if (row[j] == 0) {
+                    System.out.print(PASSAGE);
                 } else {
-                    System.out.print("██");
+                    System.out.print(WALL);
                 }
             }
         }
@@ -157,13 +163,13 @@ public class Maze {
     public String saveMaze() {
         File file = new File("test_maze.txt");
         try (PrintWriter printWriter = new PrintWriter(file)) {
-            for (int[] ints : maze) {
+            for (int[] row : maze) {
                 printWriter.write("\n");
                 for (int j = 0; j < maze[0].length; j++) {
-                    if (ints[j] == 0) {
-                        printWriter.write("\s\s");
+                    if (row[j] == 0) {
+                        printWriter.write(PASSAGE);
                     } else {
-                        printWriter.write("██");
+                        printWriter.write(WALL);
                     }
                 }
             }
@@ -181,8 +187,8 @@ public class Maze {
             mazeGraph = new Graph();
             AtomicInteger rowCount = new AtomicInteger(0);
             bytes.lines().sequential().skip(1).map(e -> {
-                e = e.replace("\s\s", "\s");
-                e = e.replace("██", "█");
+                e = e.replace(PASSAGE, " ");
+                e = e.replace(WALL, "█");
                 return e;
             }).forEachOrdered(e -> {
                 for (int i = 0; i < e.length(); i++) {
@@ -196,7 +202,6 @@ public class Maze {
                 }
                 rowCount.incrementAndGet();
             });
-
 
             for (Cell cell : mazeGraph.getAdjVerticesMap().keySet()) {
                 List<Cell> neighbors = getNeighbor(cell);
@@ -233,9 +238,8 @@ public class Maze {
             }
         }
 
-
-        Set<Cell> pathcells = dij(mazeGraph, exitCell, entryCell);
-        printMazeSolution(pathcells);
+        Set<Cell> pathCells = dij(mazeGraph, exitCell, entryCell);
+        printMazeSolution(pathCells);
     }
 
     private Set<Cell> dij(Graph solution, Cell exitCell, Cell entryCell) {
@@ -247,7 +251,6 @@ public class Maze {
         }
         dist.put(entryCell, 0);
         q.offer(entryCell);
-        main:
         while (!q.isEmpty()) {
             Cell cell = q.poll();
             q.addAll(solution.getAdjVertices(cell).stream().filter(Predicate.not(visited::contains)).toList());
@@ -256,30 +259,28 @@ public class Maze {
                 if (alt < dist.get(neiCell)) {
                     dist.put(neiCell, alt);
                     visited.add(neiCell);
-                    if(neiCell.equals(exitCell)){
+                    if (neiCell.equals(exitCell)) {
                         break;
                     }
                 }
             }
         }
         Set<Cell> path = new HashSet<>();
-        q.clear();
         q.offer(exitCell);
-        while (!q.isEmpty()){
-            Cell cell=q.poll();
-            if(cell.equals(entryCell)){
+        while (!q.isEmpty()) {
+            Cell cell = q.poll();
+            if (cell.equals(entryCell)) {
                 path.add(cell);
                 break;
             }
             List<Cell> adjVertices = solution.getAdjVertices(cell).stream().distinct().toList();
             path.add(cell);
-            if(adjVertices.size()==1){
+            if (adjVertices.size() == 1) {
                 q.offer(adjVertices.stream().findFirst().get());
-            }else{
+            } else {
                 Optional<Map.Entry<Cell, Integer>> min = dist.entrySet().stream()
                         .filter(e -> adjVertices.contains(e.getKey()))
-                        .filter(Predicate.not(e->path.contains(e.getKey())))
-                        .peek(System.out::println)
+                        .filter(Predicate.not(e -> path.contains(e.getKey())))
                         .min(Map.Entry.comparingByValue()).stream().findFirst();
                 q.offer(min.get().getKey());
             }
@@ -296,10 +297,10 @@ public class Maze {
                     if (visited.contains(new Cell(i, j))) {
                         System.out.print("//");
                     } else {
-                        System.out.print("\s\s");
+                        System.out.print(PASSAGE);
                     }
                 } else {
-                    System.out.print("██");
+                    System.out.print(WALL);
                 }
             }
         }
